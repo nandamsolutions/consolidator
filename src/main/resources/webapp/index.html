@@ -5,22 +5,37 @@
         <script src="js/underscore-min.js"></script>
         <script src="js/app.js"></script>
         <script type="text/javascript">
-            app = new App();
+            var selDiv = "";
+            document.addEventListener("DOMContentLoaded", init, false);
+            
+            function init() {
+                document.querySelector('#files').addEventListener('change', handleFileSelect, false);
+                selDiv = document.querySelector("#selectedFiles");
+            }
+                
+            function handleFileSelect(e) {
+                if(!e.target.files) return;
+                selDiv.innerHTML = "";
+                var files = e.target.files;
+                for(var i=0; i<files.length; i++) {
+                    selDiv.innerHTML += files[i].name + "<br/>";
+                }
+            }
         </script>
     </head>
     <body>
+        <div style="font-weight: bold; font-size: 40px; padding: 20px;">Consolidator</div>
         <div id="form-div">
-            <form id="data" onsubmit="return app.submitForm()">
-                <input id="file" name="file" type="file" multiple="multiple"/>
-                <button type="submit">Submit</button>
+            <form id="data" method="post" action="app" enctype="multipart/form-data">
+                <div>File Name: <input name="filename" type="text" value="Consolidated"></div> 
+                <div>Commitionerate Heading: <input name="heading" type="text" value="Consolidated"></div>
+                <div>
+                    <div style="float: left; font-size: 20px; font-weight: bold; margin-right: 10px">Selected Files:</div>
+                    <input id="files" name="files" type="file" multiple="multiple"/>
+                </div>
+                <div id="selectedFiles" style="margin-left: 10px; clear: both;"></div>
+                <button style="margin: 50px 0 0 200px" type="submit">Submit</button>
             </form>
-        </div>
-        <div id="view-div" style="display: none;">
-            <table border="">
-                <thead></thead>
-                <tbody></tbody>
-            </table>
-            <a href="javascript:void(0)" id="download" onclick="app.downloadConsolidatedReport()" download="TotalProjected.xlsx">Download Total Report</a>
         </div>
     </body>
 </html>

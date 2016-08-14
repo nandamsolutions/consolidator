@@ -1,51 +1,71 @@
 package com.nandamsolutions.consolidator;
 
-import static com.nandamsolutions.consolidator.WorkbookUtils.getNumericValue;
-import static com.nandamsolutions.consolidator.WorkbookUtils.isStringCell;
-
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.stream.Collectors;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class WorkbookService {
-    
-    private static final Logger LOGGER = LoggerFactory.getLogger(WorkbookService.class);
-    
-    public Map<String, Double> read(Workbook workbook) {
-        Map<String, Double> fieldValues = new LinkedHashMap<>();
-        workbook.iterator().forEachRemaining(sheet -> sheet.forEach(row -> {
-            Cell labelCell = row.getCell(0);
-            if (isStringCell(labelCell)) {
-                try {
-                    fieldValues.put(labelCell.getStringCellValue(), getNumericValue(row.getCell(1)));
-                } catch (Exception e) {
-                    LOGGER.error("Failed to read row", e);
+
+    public void mergeBooks(Collection<Workbook> workbooks, Workbook consolidated) {
+        List<List<Row>> workbooksRows = workbooks.stream().map(this::rowsToConsolidate).collect(Collectors.toList());
+        List<Row> consolidatedRows = this.rowsToConsolidate(consolidated);
+        for (List<Row> rows : workbooksRows) {
+            if (consolidatedRows.size() != rows.size()) {
+                throw new IllegalStateException(
+                        "Number of data rows doesn't match to consolidate. Please fix input workbooks");
+            }
+        }
+
+        for (int rowNumber = 0; rowNumber < consolidatedRows.size(); rowNumber++) {
+            Row row = consolidatedRows.get(rowNumber);
+            for (int cellNumber = 0; cellNumber < row.getLastCellNum(); cellNumber++) {
+                Cell cell = row.getCell(cellNumber);
+                if (cell != null && cell.getCellType() == Cell.CELL_TYPE_NUMERIC) {
+                    int rn = rowNumber, cn = cellNumber;
+                    cell.setCellValue(workbooksRows.stream().map(rows -> rows.get(rn).getCell(cn).getNumericCellValue())
+                            .reduce(0.0, (r, v) -> r + v));
                 }
             }
-        }));
-        return fieldValues;
-    }
-    
-    public void write(Map<String, Double> data, OutputStream os) throws IOException {
-        try (Workbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Total");
-            int rowNum = 0;
-            for (Entry<String, Double> entry : data.entrySet()) {
-                Row row = sheet.createRow(rowNum++);
-                row.createCell(0, Cell.CELL_TYPE_STRING).setCellValue(entry.getKey());
-                row.createCell(1, Cell.CELL_TYPE_NUMERIC).setCellValue(entry.getValue());
-            }
-            workbook.write(os);
         }
+    }
+
+    private List<Row> rowsToConsolidate(Workbook workbook) {
+        Iterator<Row> iterator = workbook.getSheetAt(0).iterator();
+        List<Row> rows = new ArrayList<>();
+        while (iterator.hasNext()) {
+            Row row = iterator.next();
+            if (row.getCell(0) != null && row.getCell(0).getCellType() == Cell.CELL_TYPE_STRING
+                    && row.getCell(0).getStringCellValue().trim().equalsIgnoreCase("MH-2038")) {
+                break;
+            }
+        }
+        while (iterator.hasNext()) {
+            rows.add(iterator.next());
+        }
+        return rows;
+    }
+
+    public Workbook createCopy(Workbook workbook, String name) throws IOException {
+        File tempFile = Files.createTempFile("temp-", ".xls").toFile();
+        try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+            workbook.write(fos);
+        }
+        HSSFWorkbook copy = new HSSFWorkbook(new FileInputStream(tempFile));
+        FileUtils.deleteQuietly(tempFile);
+        copy.getSheetAt(0).getRow(0).getCell(0).setCellValue(name);
+        return copy;
     }
 }
